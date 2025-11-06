@@ -1,0 +1,14 @@
+[build]
+  base = "."
+  publish = "client/build"
+  command = "npm --prefix client install && npm --prefix client run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/generate-plan"
+  to = "/.netlify/functions/generate-plan"
+  status = 200
+  force = true
