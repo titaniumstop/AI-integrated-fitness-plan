@@ -1,18 +1,17 @@
 import React from 'react';
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material';
 import FitnessForm from './components/FitnessForm';
+import Chatbot from './components/Chatbot';
 
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-    },
+    primary: { main: '#7C3AED' },
+    secondary: { main: '#06B6D4' },
+    success: { main: '#22C55E' },
+    warning: { main: '#F59E0B' },
+    error: { main: '#EF4444' },
+    background: { default: '#0F172A' },
+    text: { primary: '#E2E8F0', secondary: '#94A3B8' },
   },
   typography: {
     fontFamily: [
@@ -39,7 +38,8 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           textTransform: 'none',
-          fontWeight: 500,
+          fontWeight: 600,
+          borderRadius: 12,
         },
       },
     },
@@ -58,6 +58,7 @@ const theme = createTheme({
             fontSize: '1rem',
           },
           width: '100%',
+          borderRadius: 12,
         },
       },
     },
@@ -85,10 +86,31 @@ const theme = createTheme({
 });
 
 function App() {
+  const [profile, setProfile] = React.useState(null);
+  const [plan, setPlan] = React.useState('');
+  const [summary, setSummary] = React.useState('');
+
+  const handlePlanGenerated = ({ values, plan, summary }) => {
+    setProfile(values);
+    setPlan(plan || '');
+    setSummary(summary || '');
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <FitnessForm />
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #0F172A 0%, #111827 35%, #1F2937 100%)',
+          py: { xs: 2, md: 4 },
+        }}
+      >
+        <FitnessForm onPlanGenerated={handlePlanGenerated} />
+        <Box sx={{ mt: { xs: 2, md: 4 }, px: { xs: 2, md: 0 } }}>
+          <Chatbot profile={profile} plan={plan} />
+        </Box>
+      </Box>
     </ThemeProvider>
   );
 }

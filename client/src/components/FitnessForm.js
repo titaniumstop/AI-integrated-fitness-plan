@@ -17,6 +17,13 @@ import {
   Snackbar,
   Alert
 } from '@mui/material';
+import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import FlagIcon from '@mui/icons-material/Flag';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
+import ExerciseCard from './ExerciseCard';
 import axios from 'axios';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
@@ -37,10 +44,11 @@ const validationSchema = Yup.object({
 
 const fieldSx = { width: '100%', minWidth: 320 };
 
-const FitnessForm = () => {
+const FitnessForm = ({ onPlanGenerated }) => {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState(null);
   const [error, setError] = useState('');
+  const [summary, setSummary] = useState('');
   const [showOptional, setShowOptional] = useState(false);
 
   const formik = useFormik({
@@ -70,6 +78,10 @@ const FitnessForm = () => {
 
         const response = await axios.post('/api/generate-plan', payload);
         setPlan(response.data.plan);
+        setSummary(response.data.summary || '');
+        if (typeof onPlanGenerated === 'function') {
+          onPlanGenerated({ values: payload, plan: response.data.plan, summary: response.data.summary || '' });
+        }
       } catch (err) {
         console.error('Error generating plan:', err);
         const apiError = err.response?.data;
@@ -101,11 +113,36 @@ const FitnessForm = () => {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom align="center" color="primary">
-          AI-Powered Fitness & Nutrition Plan
-        </Typography>
-        
+      <Paper
+        elevation={8}
+        sx={{
+          p: { xs: 3, md: 4 },
+          mb: 4,
+          borderRadius: 3,
+          background: 'linear-gradient(135deg, rgba(124,58,237,0.16) 0%, rgba(6,182,212,0.12) 100%)',
+          border: '1px solid rgba(148,163,184,0.2)'
+        }}
+      >
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Typography
+            variant="h3"
+            component="h1"
+            gutterBottom
+            sx={{
+              fontWeight: 800,
+              background: 'linear-gradient(90deg, #A78BFA 0%, #22D3EE 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent'
+            }}
+          >
+            AI Fitness Planner
+          </Typography>
+          <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>
+            Personalized workouts and nutrition built by AI
+          </Typography>
+        </Box>
+
         <form onSubmit={formik.handleSubmit}>
           <Grid container spacing={3}>
             {/* Basic Information */}
@@ -348,15 +385,25 @@ const FitnessForm = () => {
                 </Grid>
               </>
             )}
-            
+
             <Grid item xs={12}>
-              <Button 
-                color="primary" 
-                variant="contained" 
-                fullWidth 
+              <Button
+                color="primary"
+                variant="contained"
+                fullWidth
                 type="submit"
                 disabled={loading || !formik.isValid}
-                sx={{ py: 1.5, mt: 2 }}
+                sx={{
+                  py: 1.5,
+                  mt: 2,
+                  fontWeight: 700,
+                  background: 'linear-gradient(90deg, #7C3AED 0%, #06B6D4 100%)',
+                  boxShadow: '0 8px 20px rgba(6,182,212,0.25)',
+                  '&:hover': {
+                    background: 'linear-gradient(90deg, #6D28D9 0%, #0891B2 100%)',
+                    boxShadow: '0 12px 24px rgba(6,182,212,0.35)'
+                  }
+                }}
               >
                 {loading ? <CircularProgress size={24} color="inherit" /> : 'Generate My Plan'}
               </Button>
@@ -364,38 +411,85 @@ const FitnessForm = () => {
           </Grid>
         </form>
       </Paper>
-      
+
+      {summary && (
+        <Paper
+          elevation={8}
+          sx={{
+            p: { xs: 3, md: 4 },
+            mb: 4,
+            borderRadius: 3,
+            background: 'linear-gradient(135deg, rgba(6,182,212,0.12) 0%, rgba(34,197,94,0.12) 100%)',
+            border: '1px solid rgba(148,163,184,0.2)'
+          }}
+        >
+          <Typography variant="h5" component="h2" gutterBottom color="secondary">
+            Summary (Key Points)
+          </Typography>
+          <Box component="div" sx={{ whiteSpace: 'pre-wrap' }}>
+            {summary}
+          </Box>
+        </Paper>
+      )}
+
       {plan && (
-        <Paper elevation={3} sx={{ p: 4, mb: 4 }}>
+        <Paper
+          elevation={8}
+          sx={{
+            p: { xs: 3, md: 4 },
+            mb: 4,
+            borderRadius: 3,
+            background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(124,58,237,0.08) 100%)',
+            border: '1px solid rgba(148,163,184,0.2)'
+          }}
+        >
           <Typography variant="h5" component="h2" gutterBottom color="primary">
             Your Personalized Fitness & Nutrition Plan
           </Typography>
-          <Box 
-            component="div" 
-            sx={{ 
+          <Box
+            component="div"
+            sx={{
               whiteSpace: 'pre-wrap',
-              '& h3': { 
-                mt: 3, 
-                mb: 1.5, 
-                color: 'primary.main' 
+              '& h3': {
+                mt: 3,
+                mb: 1.5,
+                color: 'primary.main'
               },
-              '& ul': { 
+              '& ul': {
                 pl: 2.5,
                 '& li': {
                   mb: 1
                 }
               }
             }}
-            dangerouslySetInnerHTML={{ 
-              __html: plan.replace(/\n\n/g, '<br><br>').replace(/\n/g, ' ').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-            }} 
+            dangerouslySetInnerHTML={{
+              __html: plan.replace(/\n\n/g, '<br><br>').replace(/\n/g, ' ').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            }}
           />
         </Paper>
       )}
-      
-      <Snackbar 
-        open={!!error} 
-        autoHideDuration={6000} 
+
+      {/* Sample colorful exercise designs */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FitnessCenterIcon color="primary" /> Explore Exercise Styles
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6} md={4}>
+            <ExerciseCard title="Strength Training" subtitle="Compound lifts, progressive overload" type="strength" icon={<FitnessCenterIcon />} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <ExerciseCard title="Cardio" subtitle="Intervals, steady-state, heart health" type="cardio" icon={<WhatshotIcon />} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={4}>
+            <ExerciseCard title="Mobility" subtitle="Flexibility, recovery, balance" type="mobility" icon={<FavoriteIcon />} />
+          </Grid>
+        </Grid>
+      </Box>
+
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
         onClose={() => setError('')}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
