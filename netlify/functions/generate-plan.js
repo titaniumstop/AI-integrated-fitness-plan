@@ -68,7 +68,8 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
               role: 'user',
               parts: [{ text: prompt }]
             }
-          ]
+          ],
+          generationConfig: { maxOutputTokens: 768, temperature: 0.7, topP: 0.95 }
         }),
         signal: ctrl.signal
       }), timeoutMs, ctrl);
@@ -104,9 +105,9 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
     let lastErr;
     try {
       const isLocal = (process.env.NETLIFY_DEV || process.env.NETLIFY_LOCAL) ? true : false;
-      const apiVersions = isLocal ? ['v1beta'] : ['v1beta', 'v1'];
-      const deadline = Date.now() + (isLocal ? 30000 : 55000);
-      const perCallMs = isLocal ? 20000 : 20000;
+      const apiVersions = isLocal ? ['v1beta'] : ['v1beta'];
+      const deadline = Date.now() + (isLocal ? 30000 : 25000);
+      const perCallMs = isLocal ? 20000 : 12000;
       // Local dev: single, known-good model only (REST with tight config)
       if (isLocal) {
         try {
@@ -143,47 +144,13 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
           };
         }
       }
-      // Production path below
-      if (!text) {
-      // Step 1: List models across versions and try available ones first (short timeouts)
-      for (const apiV of apiVersions) {
+      // Production path below: single fast call to v1beta gemini-2.5-flash
+      if (!isLocal) {
         try {
-          const models = await listModels(apiV);
-          const supported = models.filter(m => (m.supportedGenerationMethods || []).includes('generateContent'));
-          const twopointfive = supported.filter(m => m.name.includes('2.5-'));
-          const others = supported.filter(m => !m.name.includes('2.5-'));
-          const byPreference = [...twopointfive, ...others];
-          const toTry = isLocal ? twopointfive.slice(0, 1) : byPreference;
-          for (const m of toTry) {
-            if (Date.now() > deadline) throw new Error('Global timeout before model attempts');
-            try {
-              text = await callGeminiREST(m.name, apiV, perCallMs);
-              break;
-            } catch (e) {
-              lastErr = e;
-            }
-          }
-          if (text) break;
+          text = await callGeminiREST('models/gemini-2.5-flash', 'v1beta', perCallMs);
         } catch (e) {
           lastErr = e;
         }
-      }
-      // Step 2: Fallback to preferred list (no 1.5 models)
-      if (!text) {
-        for (const apiV of apiVersions) {
-          for (const name of preferred) {
-            if (isLocal && !name.includes('2.5-') && name !== 'gemini-pro') continue;
-            if (Date.now() > deadline) throw new Error('Global timeout before preferred attempts');
-            try {
-              text = await callGeminiREST(name, apiV, perCallMs);
-              break;
-            } catch (e) {
-              lastErr = e;
-            }
-          }
-          if (text) break;
-        }
-      }
       }
     } catch (outer) {
       lastErr = outer;
