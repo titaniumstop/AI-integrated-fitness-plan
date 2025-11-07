@@ -40,8 +40,9 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
 4. Hydration goals
 5. Additional recommendations based on the user's data`;
 
-    async function callGeminiREST(model) {
-      const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
+    async function callGeminiREST(model, version = 'v1') {
+      const modelPath = model.startsWith('models/') ? model : `models/${model}`;
+      const url = `https://generativelanguage.googleapis.com/${version}/${modelPath}:generateContent`;
       const resp = await fetch(url + `?key=${encodeURIComponent(apiKey)}`, {
         method: 'POST',
         headers: {
@@ -58,7 +59,7 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
       });
       if (!resp.ok) {
         const txt = await resp.text();
-        throw new Error(`${resp.status} ${resp.statusText}: ${txt}`);
+        throw new Error(`HTTP ${resp.status} ${resp.statusText} at ${url}: ${txt}`);
       }
       const data = await resp.json();
       const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
@@ -66,10 +67,10 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
       return text;
     }
 
-    async function listModels() {
-      const url = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey)}`;
+    async function listModels(version = 'v1') {
+      const url = `https://generativelanguage.googleapis.com/${version}/models?key=${encodeURIComponent(apiKey)}`;
       const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`ListModels failed: ${resp.status} ${resp.statusText}`);
+      if (!resp.ok) throw new Error(`ListModels failed at ${url}: ${resp.status} ${resp.statusText}`);
       const data = await resp.json();
       return data?.models || [];
     }
@@ -84,28 +85,38 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
     let text;
     let lastErr;
     try {
-      // Try preferred names first
-      for (const name of preferred) {
-        try {
-          text = await callGeminiREST(name);
-          break;
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-      // Fallback: query ListModels and pick any that supports generateContent
-      if (!text) {
-        const models = await listModels();
-        const supported = models.filter(m => (m.supportedGenerationMethods || []).includes('generateContent'));
-        // Prefer 1.5-pro, then 1.5-flash, then any
-        const byPreference = supported.sort((a, b) => {
-          const rank = (name) => name.includes('1.5-pro') ? 0 : name.includes('1.5-flash') ? 1 : 2;
-          return rank(a.name) - rank(b.name);
-        });
-        for (const m of byPreference) {
+      const apiVersions = ['v1beta', 'v1'];
+      // Try preferred names first across versions
+      for (const apiV of apiVersions) {
+        for (const name of preferred) {
           try {
-            text = await callGeminiREST(m.name);
+            text = await callGeminiREST(name, apiV);
             break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (text) break;
+      }
+      // Fallback: list models across versions
+      if (!text) {
+        for (const apiV of apiVersions) {
+          try {
+            const models = await listModels(apiV);
+            const supported = models.filter(m => (m.supportedGenerationMethods || []).includes('generateContent'));
+            const byPreference = supported.sort((a, b) => {
+              const rank = (nm) => nm.includes('1.5-pro') ? 0 : nm.includes('1.5-flash') ? 1 : 2;
+              return rank(a.name) - rank(b.name);
+            });
+            for (const m of byPreference) {
+              try {
+                text = await callGeminiREST(m.name, apiV);
+                break;
+              } catch (e) {
+                lastErr = e;
+              }
+            }
+            if (text) break;
           } catch (e) {
             lastErr = e;
           }
