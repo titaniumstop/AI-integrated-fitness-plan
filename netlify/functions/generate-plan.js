@@ -66,26 +66,56 @@ Please provide a detailed 7-day fitness and nutrition plan that includes:
       return text;
     }
 
-    const candidates = [
+    async function listModels() {
+      const url = `https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`ListModels failed: ${resp.status} ${resp.statusText}`);
+      const data = await resp.json();
+      return data?.models || [];
+    }
+
+    // Resolve a working model dynamically
+    const preferred = [
       'gemini-1.5-pro-latest',
       'gemini-1.5-flash-latest',
-      'gemini-1.0-pro-latest',
-      'gemini-pro'
+      'gemini-1.0-pro-latest'
     ];
 
     let text;
     let lastErr;
-    for (const name of candidates) {
-      try {
-        text = await callGeminiREST(name);
-        break;
-      } catch (e) {
-        lastErr = e;
+    try {
+      // Try preferred names first
+      for (const name of preferred) {
+        try {
+          text = await callGeminiREST(name);
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
       }
+      // Fallback: query ListModels and pick any that supports generateContent
+      if (!text) {
+        const models = await listModels();
+        const supported = models.filter(m => (m.supportedGenerationMethods || []).includes('generateContent'));
+        // Prefer 1.5-pro, then 1.5-flash, then any
+        const byPreference = supported.sort((a, b) => {
+          const rank = (name) => name.includes('1.5-pro') ? 0 : name.includes('1.5-flash') ? 1 : 2;
+          return rank(a.name) - rank(b.name);
+        });
+        for (const m of byPreference) {
+          try {
+            text = await callGeminiREST(m.name);
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+      }
+    } catch (outer) {
+      lastErr = outer;
     }
-    if (!text) {
-      throw new Error(`All model attempts failed. Last error: ${lastErr?.message || 'unknown'}`);
-    }
+
+    if (!text) throw new Error(`All model attempts failed. Last error: ${lastErr?.message || 'unknown'}`);
 
     return {
       statusCode: 200,
