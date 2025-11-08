@@ -76,6 +76,8 @@ ${body.oxygenSaturation ? `- Oxygen Saturation: ${body.oxygenSaturation}%` : ''}
 ${body.bloodPressure ? `- Blood Pressure: ${body.bloodPressure}` : ''}
 ${body.waterIntake ? `- Daily Water Intake: ${body.waterIntake}L` : ''}
 ${body.calorieIntake ? `- Daily Calorie Intake: ${body.calorieIntake} kcal` : ''}
+${body.healthRestrictions ? `- Health Restrictions: ${body.healthRestrictions}` : ''}
+${body.disabilities ? `- Disabilities/Limitations: ${body.disabilities}` : ''}
 
 PERSONALIZED TARGETS (adhere strictly):
 - Daily Calories: ${targetKcal} kcal (based on BMR ${Math.round(bmr)} and TDEE ${tdee} with goal adjustment ${Math.round(adj*100)}%)
@@ -86,7 +88,7 @@ Provide a detailed 7-day plan that includes:
    - 45–70 min session outline with warm-up, main sets, and cool-down.
    - For each exercise: movement name, sets × reps, rest time, and simple coaching cue.
    - Provide a no-equipment substitution for each exercise when possible.
-   - Include 1–2 progression ideas for the week.
+   - If health restrictions or disabilities are present, adapt exercise selection, volume, and intensity to be safe and accessible; suggest alternatives (e.g., chair-supported, band-assisted, low-impact) as needed.
 2) Daily DIET:
    - 3 meals + 2 snacks per day (or culturally appropriate pattern) with portion sizes.
    - Per-day macro breakdown (g protein/carbs/fats) that matches the personalized targets above.
@@ -95,7 +97,7 @@ Provide a detailed 7-day plan that includes:
 3) HYDRATION: daily goal and practical tip.
 4) REST/RECOVERY: mobility or light activity suggestions where appropriate.
 5) SHOPPING LIST: consolidated weekly grocery list grouped by category (protein, carbs, produce, pantry, dairy/alternatives) filtered for any dietary restrictions.
-6) SAFETY NOTES: brief and relevant to the user's metrics.
+6) SAFETY NOTES: brief and relevant to the user's metrics and any listed restrictions/disabilities (e.g., avoid high-impact if joint issues, monitor RPE if cardiac history).
 
 Format clearly with headings per day (Day 1 … Day 7), then subsections: Workouts, Diet (with Meals/Snacks), Hydration, Recovery. Keep within ~800 words total.
 Be concise but descriptive so the user can follow the plan without ambiguity.`;
@@ -167,6 +169,57 @@ Be concise but descriptive so the user can follow the plan without ambiguity.`;
       }
     }
 
+    // Enforce dietary restrictions by post-processing plan text
+    function sanitizePlan(text, restrictions) {
+      const restr = String(restrictions || '').toLowerCase();
+      if (!restr) return text;
+
+      let out = text;
+      const replaceAll = (pairs) => {
+        for (const [re, repl] of pairs) {
+          out = out.replace(re, repl);
+        }
+      };
+
+      const dairyTerms = [
+        [/\bgreek\s+yogurt\b/gi, 'plant-based yogurt'],
+        [/\byogurt\b/gi, 'plant-based yogurt'],
+        [/\bmilk\b/gi, 'plant milk'],
+        [/\bcheese\b/gi, 'dairy-free cheese'],
+        [/\bcottage\s+cheese\b/gi, 'tofu scramble'],
+        [/\bbutter\b/gi, 'olive oil'],
+      ];
+      const meatTerms = [
+        [/\bchicken\b/gi, 'tofu'],
+        [/\bbeef\b/gi, 'tempeh'],
+        [/\bpork\b/gi, 'seitan'],
+        [/\bfish\b/gi, 'legumes'],
+        [/\bsalmon\b/gi, 'lentils'],
+        [/\bturkey\b/gi, 'tofu'],
+        [/\begg(s)?\b/gi, 'tofu scramble']
+      ];
+      const glutenTerms = [
+        [/\bbread\b/gi, 'gluten-free bread'],
+        [/\bpasta\b/gi, 'gluten-free pasta'],
+        [/\bwrap\b/gi, 'gluten-free wrap'],
+      ];
+
+      const isVegan = restr.includes('vegan');
+      const isVegetarian = !isVegan && restr.includes('vegetarian');
+      const isDairyFree = isVegan || restr.includes('dairy') || restr.includes('lactose');
+      const isGlutenFree = restr.includes('gluten');
+
+      if (isDairyFree) replaceAll(dairyTerms);
+      if (isVegan) { replaceAll(meatTerms); }
+      else if (isVegetarian) {
+        // Remove meats but allow eggs/dairy unless dairy-free as well
+        replaceAll(meatTerms.filter(([re, _]) => !/egg/gi.test(re.source)));
+      }
+      if (isGlutenFree) replaceAll(glutenTerms);
+
+      return out;
+    }
+
     async function listModels(version = 'v1') {
       const url = `https://generativelanguage.googleapis.com/${version}/models?key=${encodeURIComponent(apiKey)}`;
       const ctrl = new AbortController();
@@ -216,22 +269,46 @@ Be concise but descriptive so the user can follow the plan without ambiguity.`;
           const dataC = await respC.json();
           const t = (dataC?.candidates?.[0]?.content?.parts || []).map(p => (typeof p === 'string' ? p : p.text || '')).join('');
           if (!t) throw new Error(`Empty model response (concise): ${JSON.stringify(dataC).slice(0,400)}`);
-          const summary = await summarizePlan(t);
+          const tSan = sanitizePlan(t, body.dietaryRestrictions);
+          const summary = await summarizePlan(tSan);
           return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ success: true, plan: t, summary })
+            body: JSON.stringify({ success: true, plan: tSan, summary })
           };
         } catch (e) {
           // Fallback minimal plan composed on server (local-only) to avoid empty output during development
-          const day = (i) => `Day ${i}\nWorkouts: 45–60 min mixed (push/pull/legs/cardio). Choose 4–5 moves, 3×8–12 reps, 60–90s rest. No equipment? Do push-ups, squats, lunges, rows (towel/doorframe), planks.\nDiet (approx ${targetKcal} kcal | P${macros.proteinG}/C${macros.carbsG}/F${macros.fatG}):\n- Breakfast: Greek yogurt + berries + oats.\n- Lunch: Grain bowl (rice/quinoa), tofu/beans/chicken, veggies, olive oil.\n- Snack: Fruit + nuts.\n- Dinner: Lean protein, roasted veg, potatoes/rice.\n- Snack: Cottage cheese or protein shake.\nHydration: 2–3L water. Recovery: 10 min mobility.`;
+          const restr = String(body.dietaryRestrictions || '').toLowerCase();
+          const isVegan = restr.includes('vegan');
+          const isVegetarian = !isVegan && restr.includes('vegetarian');
+          const isDairyFree = isVegan || restr.includes('dairy') || restr.includes('lactose');
+          const isGlutenFree = restr.includes('gluten');
+
+          const grains = isGlutenFree ? 'quinoa/brown rice' : 'rice/quinoa/whole-grain bread';
+          const yogurt = isVegan || isDairyFree ? 'coconut/soy yogurt' : 'Greek yogurt';
+          const milk = isVegan || isDairyFree ? 'almond/oat milk' : 'milk';
+          const proteinMain = isVegan ? 'tofu/tempeh/beans/lentils' : (isVegetarian ? 'eggs/beans/tofu' : 'chicken/fish/beans/tofu');
+          const shake = isVegan || isDairyFree ? 'plant-based protein shake' : 'protein shake';
+
+          const breakfast = isVegan
+            ? `${yogurt ? `${yogurt}` : 'Overnight oats'} with berries, chia; or overnight oats with ${milk}`
+            : `${yogurt} + berries + oats; or eggs + toast (${grains})`;
+          const lunch = `Grain bowl (${grains}), ${proteinMain}, mixed veggies, olive oil`;
+          const snack1 = 'Fruit + nuts or hummus + veggies';
+          const dinner = isVegan
+            ? 'Lentil/bean chili or tofu stir-fry, roasted veg, potatoes/rice'
+            : `Lean protein (${proteinMain}), roasted veg, potatoes/${isGlutenFree ? 'rice' : 'rice/bread'}`;
+          const snack2 = isVegan || isDairyFree ? `${shake}` : 'Cottage cheese or protein shake';
+
+          const day = (i) => `Day ${i}\nWorkouts: 45–60 min mixed (push/pull/legs/cardio). Choose 4–5 moves, 3×8–12 reps, 60–90s rest. No equipment? Do push-ups, squats, lunges, rows (towel/doorframe), planks.\nDiet (approx ${targetKcal} kcal | P${macros.proteinG}/C${macros.carbsG}/F${macros.fatG}):\n- Breakfast: ${breakfast}.\n- Lunch: ${lunch}.\n- Snack: ${snack1}.\n- Dinner: ${dinner}.\n- Snack: ${snack2}.\nHydration: 2–3L water. Recovery: 10 min mobility.`;
           let planText = `Personalized Targets\n- Calories: ${targetKcal} kcal\n- Macros: Protein ${macros.proteinG} g, Carbs ${macros.carbsG} g, Fats ${macros.fatG} g\nDietary Restrictions: ${body.dietaryRestrictions || 'None'}\n\n`;
           for (let i = 1; i <= 7; i++) planText += day(i) + "\n\n";
-          const summary = await summarizePlan(planText);
+          const planSan = sanitizePlan(planText, body.dietaryRestrictions);
+          const summary = await summarizePlan(planSan);
           return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ success: true, plan: planText, summary, note: 'Returned server fallback due to local model limit: ' + e.message })
+            body: JSON.stringify({ success: true, plan: planSan, summary, note: 'Returned server fallback due to local model limit: ' + e.message })
           };
         }
       }
@@ -249,12 +326,13 @@ Be concise but descriptive so the user can follow the plan without ambiguity.`;
 
     if (!text) throw new Error(`All model attempts failed. Last error: ${lastErr?.message || 'unknown'}`);
 
-    const summaryFinal = await summarizePlan(text);
+    const textSan = sanitizePlan(text, body.dietaryRestrictions);
+    const summaryFinal = await summarizePlan(textSan);
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: true, plan: text, summary: summaryFinal })
+      body: JSON.stringify({ success: true, plan: textSan, summary: summaryFinal })
     };
   } catch (err) {
     console.error('Function error:', err);

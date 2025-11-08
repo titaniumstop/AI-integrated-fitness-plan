@@ -40,6 +40,8 @@ const validationSchema = Yup.object({
   bloodPressure: Yup.string().matches(/^\d{1,3}\/\d{1,3}$/, 'Enter valid BP (e.g., 120/80)'),
   waterIntake: Yup.number().min(0.5, 'Must be at least 0.5L').max(10, 'Must be under 10L'),
   calorieIntake: Yup.number().min(500, 'Must be at least 500 kcal').max(10000, 'Must be under 10,000 kcal'),
+  healthRestrictions: Yup.string(),
+  disabilities: Yup.string(),
 });
 
 const fieldSx = { width: '100%', minWidth: 320 };
@@ -64,6 +66,8 @@ const FitnessForm = ({ onPlanGenerated }) => {
       bloodPressure: '',
       waterIntake: '',
       calorieIntake: '',
+      healthRestrictions: '',
+      disabilities: '',
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -288,6 +292,48 @@ const FitnessForm = ({ onPlanGenerated }) => {
                 variant="outlined"
                 size="medium"
                 InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                sx={fieldSx}
+                id="healthRestrictions"
+                name="healthRestrictions"
+                label="Health Restrictions (optional)"
+                value={formik.values.healthRestrictions}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                error={formik.touched.healthRestrictions && Boolean(formik.errors.healthRestrictions)}
+                helperText={formik.touched.healthRestrictions && formik.errors.healthRestrictions}
+                margin="normal"
+                placeholder="e.g., heart condition, joint pain, prior injuries, pregnancy, etc."
+                variant="outlined"
+                size="medium"
+                InputLabelProps={{ shrink: true }}
+                multiline
+                minRows={2}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                sx={fieldSx}
+                id="disabilities"
+                name="disabilities"
+                label="Disabilities or Limitations (optional)"
+                value={formik.values.disabilities}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                error={formik.touched.disabilities && Boolean(formik.errors.disabilities)}
+                helperText={formik.touched.disabilities && formik.errors.disabilities}
+                margin="normal"
+                placeholder="e.g., mobility device use, limited range of motion, balance issues, etc."
+                variant="outlined"
+                size="medium"
+                InputLabelProps={{ shrink: true }}
+                multiline
+                minRows={2}
               />
             </Grid>
             
