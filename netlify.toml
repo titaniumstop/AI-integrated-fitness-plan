@@ -3,6 +3,9 @@
   publish = "client/build"
   command = "npm --prefix client install && npm --prefix client run build"
 
+[build.environment]
+  NODE_VERSION = "18"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
